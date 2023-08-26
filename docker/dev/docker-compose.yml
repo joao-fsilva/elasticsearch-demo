@@ -1,0 +1,73 @@
+version: '3.1'
+services:
+  elasticsearchdemo-dev-php:
+    build:
+      dockerfile: ./../php.dockerfile
+      context: .
+    image: elasticsearchdemo/php
+    restart: ${RESTART_POLICY}
+    container_name: elasticsearchdemo-dev-php
+    volumes:
+      - "${PROJECT_FOLDER}:/www/elasticsearch-demo"
+      - "${PHP_LOG_DIR}:/var/log/php"
+      - './php/overrides.php.ini:/usr/local/etc/php/conf.d/99-overrides.php.ini'
+    networks:
+      - elasticsearchdemo-dev-network
+  elasticsearchdemo-dev-nginx:
+    build:
+      dockerfile: ./../nginx.dockerfile
+      context: .
+    image: elasticsearchdemo/nginx
+    restart: ${RESTART_POLICY}
+    container_name: elasticsearchdemo-dev-nginx
+    volumes:
+      - "${PROJECT_FOLDER}:/www/elasticsearch-demo"
+      - "${NGINX_LOG_DIR}:/var/log/nginx"
+      - './nginx/nginx.conf:/etc/nginx/nginx.conf'
+      - './nginx/conf.d:/etc/nginx/conf.d'
+    ports:
+      - "${HTTP_PORT}:80"
+    networks:
+      - elasticsearchdemo-dev-network
+    depends_on:
+      - "elasticsearchdemo-dev-php"
+  elasticsearchdemo-es01:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.9.1
+    container_name: elasticsearchdemo-es01
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    volumes:
+      - "${ELASTICSEARCH_DATA}:/usr/share/elasticsearch/data"
+    ports:
+      - "9200:9200"
+    networks:
+      - elasticsearchdemo-dev-network
+  elasticsearchdemo-kib01:
+    image: docker.elastic.co/kibana/kibana:8.9.1
+    container_name: elasticsearchdemo-kib01
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearchdemo-es01:9200
+      ELASTICSEARCH_HOSTS: '["http://elasticsearchdemo-es01:9200"]'
+    networks:
+      - elasticsearchdemo-dev-network
+  elasticsearchdemo-mysql:
+    image: mysql:8.1
+    container_name: elasticsearchdemo-mysql
+    ports:
+      - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: elasticsearch_demo
+    volumes:
+      - "${MYSQL_DATA}:/var/lib/mysql"
+    networks:
+      - elasticsearchdemo-dev-network
+networks:
+  elasticsearchdemo-dev-network:
+    driver: bridge
